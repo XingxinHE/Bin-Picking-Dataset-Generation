@@ -1,0 +1,33 @@
+[project]
+name = "binpack-datasets"
+version = "0.0.1"
+authors = [
+  { name="Ziqi Wang", email="ziqiw@ust.hk" },
+]
+
+dependencies = [
+    "open3d",
+    "pybullet",
+    "matplotlib"
+]
+
+description = "A package for conducting research using robots for assembly"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[tool.hatch.build.targets.wheel]
+ignore-vcs = true
+packages = ["src/learn2assemble"]
+include = ["src/**"]
+
+[build-system]
+requires = ["hatchling >= 1.27.0"]
+build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/kiki007/LearningToAssemble"
+Issues = "https://github.com/kiki007/LearningToAssemble/issues"
