@@ -71,10 +71,11 @@ def crop_pointcloud_from_camera_fov(data_points, cam_viewpoint=None):
     # o3d.visualization.draw_geometries([pcd])
 
     if cam_viewpoint is None:  # compute based on point cloud bounding box size
-        diameter = np.linalg.norm(
-            np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound())
-        )
-        cam_viewpoint = [0, 0, diameter]
+        # diameter = np.linalg.norm(
+        #     np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound())
+        # )
+        # cam_viewpoint = [0, 0, diameter]
+        cam_viewpoint = [0, 0, 0.6] # Fixed camera position for Zivid 2+ MR60
     radius = cam_viewpoint[2] * 1000
 
     _, pt_map = pcd.hidden_point_removal(cam_viewpoint, radius)

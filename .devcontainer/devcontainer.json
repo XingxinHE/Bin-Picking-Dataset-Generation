@@ -1,0 +1,45 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
+{
+	"name": "bin-picking-datagen",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	"image": "nvcr.io/nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04",
+	// "build": {
+	// 	"dockerfile": "Dockerfile"
+	// },
+
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"username": "ubuntu",
+			"userUid": "1000",
+			"userGid": "1000",
+			"configureZshAsDefaultShell": false
+		},
+		"ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}
+	},
+
+	"workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+    "source=/dev,target=/dev,type=bind",
+    "source=/media,target=/media,type=bind",
+    "source=local-${localWorkspaceFolderBasename},target=/home/ubuntu/.local,type=volume",
+    "source=cache-${localWorkspaceFolderBasename},target=/home/ubuntu/.cache,type=volume"
+  ],
+	"privileged": true,
+  "postCreateCommand": "sudo chown -R ubuntu:ubuntu /home/ubuntu/.local /home/ubuntu/.cache",
+	"runArgs": ["--env=DISPLAY=${localEnv:DISPLAY}"],
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Use 'postCreateCommand' to run commands after the container is created.
+	// "postCreateCommand": "uname -a",
+
+	// Configure tool-specific properties.
+	// "customizations": {},
+
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	"remoteUser": "ubuntu"
+}

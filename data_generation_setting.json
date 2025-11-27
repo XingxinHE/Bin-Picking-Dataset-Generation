@@ -1,13 +1,13 @@
 {
     "data_generation": {
         "start_cycle": 1,
-        "end_cycle": 50,
-        "max_drop": 30
+        "end_cycle": 5,
+        "max_drop": 10
     },
     "folder_struct": {
         "dataset_folder_name": "data",
         "model_folder_name": "model",
-        "item_name": "IPAGearShaft",
+        "item_name": "teris",
         "train_test_folder_name": "training",
         "rgb_img_folder_name": "p_rgb",
         "depth_img_folder_name": "p_depth",
@@ -19,7 +19,7 @@
         "h5_folder_name": "h5"
     },
     "model_param": {
-        "model_filename": "IPAGearShaft.stl",
-        "max_d": 0.436
+        "model_filename": "T.obj",
+        "max_d": 0.1
     }
 }

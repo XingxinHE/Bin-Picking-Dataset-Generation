@@ -22,10 +22,10 @@ else:
     p.connect(p.DIRECT)
 
 # ''' virtual camera parameter in pybullet'''
-CAMERA_IMG_WIDTH_ = 512  # px
-CAMERA_IMG_HEIGHT_ = 512  # px
+CAMERA_IMG_WIDTH_ = 2448  # px
+CAMERA_IMG_HEIGHT_ = 2048  # px
 
-CAMERA_FOV_ = 60  # describes how “wide” the camera’s visual field is
+CAMERA_FOV_ = 43  # Zivid 2+ MR60 vertical FOV approx 43 degrees
 CAMERA_ASPECT_ = (
     CAMERA_IMG_WIDTH_ / CAMERA_IMG_HEIGHT_
 )  # describes the camera aspect ratio
@@ -34,8 +34,8 @@ CAMERA_FAR_ = 2.0  # describe the minimum and maximum distance which the camera 
 CAMERA_EYE_POSITION_ = [
     0,
     0,
-    1.25,
-]  # physical location of the camera in x, y, and z coordinates
+    0.60,
+]  # physical location of the camera in x, y, and z coordinates (60cm)
 CAMERA_TARGET_POSITION_ = [
     0,
     0,
@@ -54,21 +54,20 @@ CAMERA_PROJ_MATRIX_ = p.computeProjectionMatrixFOV(
 
 
 # '''Box/Container parameters'''
-BOX_MODEL_PATH_ = "model/tote_box/tote_box.urdf"
-BOX_WIDTH_X_ = 0.6  # meters
-BOX_WIDTH_Y_ = 0.4
-BOX_SCALING_ = 2.0  # adjust scaling factor if box is too small
+# BOX_MODEL_PATH_ = "model/tote_box/tote_box.urdf" # Removed for optical table setup
+# BOX_WIDTH_X_ = 0.6  # meters
+# BOX_WIDTH_Y_ = 0.4
+# BOX_SCALING_ = 2.0  # adjust scaling factor if box is too small
 
 # ''' Dropping parameters'''
-ITEM_MODEL_PATH_ = "model/IPAGearShaft/IPAGearShaft.urdf"
-DROP_X_MIN_ = (
-    -(BOX_WIDTH_X_ * BOX_SCALING_ * 0.6) / 2.0
-)  # box width * box scaling* limit range scaling (to prevent drop at the edge of the box) / half
-DROP_X_MAX_ = (BOX_WIDTH_X_ * BOX_SCALING_ * 0.6) / 2.0
-DROP_Y_MIN_ = -(BOX_WIDTH_Y_ * BOX_SCALING_ * 0.6) / 2.0
-DROP_Y_MAX_ = (BOX_WIDTH_Y_ * BOX_SCALING_ * 0.6) / 2.0
-DROP_Z_MIN_ = 1.0
-DROP_Z_MAX_ = 1.5
+ITEM_MODEL_PATH_ = "model/teris/T.urdf"
+# Drop range adjusted for Zivid 2+ MR60 FOV (approx 58x47cm)
+DROP_X_MIN_ = -0.2
+DROP_X_MAX_ = 0.2
+DROP_Y_MIN_ = -0.15
+DROP_Y_MAX_ = 0.15
+DROP_Z_MIN_ = 0.2 # Lower drop height since no box
+DROP_Z_MAX_ = 0.4
 
 # ''' data collection cycle and drop setting '''
 START_CYCLE_ = json_setting["data_generation"][
@@ -162,6 +161,13 @@ def setup_env():
     p.setPhysicsEngineParameter(numSolverIterations=30)
     p.setPhysicsEngineParameter(fixedTimeStep=TIMESTEP_)
     planeId = p.loadURDF("plane100.urdf")
+    textureId = p.loadTexture("assets/optical-table-texture.png")
+    p.changeVisualShape(
+        objectUniqueId=planeId,
+        linkIndex=-1,
+        textureUniqueId=textureId,
+        specularColor=[0.8, 0.8, 0.8]
+    )
     if useRealTimeSimulation:
         p.setRealTimeSimulation(1)
 
@@ -196,16 +202,17 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         setup_env()
 
         # '''place a box at the middle'''
-        boxStartPos = [0, 0, 0.01]
-        boxStartOrientation = p.getQuaternionFromEuler([1.571, 0, 0])
-        boxId = p.loadURDF(
-            BOX_MODEL_PATH_,
-            boxStartPos,
-            boxStartOrientation,
-            useFixedBase=1,
-            globalScaling=BOX_SCALING_,
-        )
-        boxPos, boxQuat = p.getBasePositionAndOrientation(boxId)
+        # Removed box for optical table setup
+        # boxStartPos = [0, 0, 0.01]
+        # boxStartOrientation = p.getQuaternionFromEuler([1.571, 0, 0])
+        # boxId = p.loadURDF(
+        #     BOX_MODEL_PATH_,
+        #     boxStartPos,
+        #     boxStartOrientation,
+        #     useFixedBase=1,
+        #     globalScaling=BOX_SCALING_,
+        # )
+        # boxPos, boxQuat = p.getBasePositionAndOrientation(boxId)
         time.sleep(0.1)
 
         # '''start the dropping loop'''
