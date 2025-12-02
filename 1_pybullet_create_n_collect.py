@@ -34,8 +34,8 @@ CAMERA_FAR_ = 2.0  # describe the minimum and maximum distance which the camera 
 CAMERA_EYE_POSITION_ = [
     0,
     0,
-    0.60,
-]  # physical location of the camera in x, y, and z coordinates (60cm)
+    0.65,
+]  # physical location of the camera in x, y, and z coordinates (65cm)
 CAMERA_TARGET_POSITION_ = [
     0,
     0,
@@ -62,12 +62,14 @@ CAMERA_PROJ_MATRIX_ = p.computeProjectionMatrixFOV(
 # ''' Dropping parameters'''
 ITEM_MODEL_PATH_ = "model/teris/T.urdf"
 # Drop range adjusted for Zivid 2+ MR60 FOV (approx 58x47cm)
-DROP_X_MIN_ = -0.2
-DROP_X_MAX_ = 0.2
-DROP_Y_MIN_ = -0.15
-DROP_Y_MAX_ = 0.15
-DROP_Z_MIN_ = 0.2 # Lower drop height since no box
-DROP_Z_MAX_ = 0.4
+# We will place items within this range
+DROP_X_MIN_ = -0.25
+DROP_X_MAX_ = 0.25
+DROP_Y_MIN_ = -0.2
+DROP_Y_MAX_ = 0.2
+# Z height for placement (just above table surface at z=0)
+DROP_Z_MIN_ = 0.05
+DROP_Z_MAX_ = 0.05
 
 # ''' data collection cycle and drop setting '''
 START_CYCLE_ = json_setting["data_generation"][
@@ -160,7 +162,24 @@ def setup_env():
     )
     p.setPhysicsEngineParameter(numSolverIterations=30)
     p.setPhysicsEngineParameter(fixedTimeStep=TIMESTEP_)
-    planeId = p.loadURDF("plane100.urdf")
+
+    # # HXX: table
+    # table_dims = [0.58, 0.47, 0.02] # Width, Length, Height (thickness)
+    # table_half_extents = [d/2 for d in table_dims]
+    # colId = p.createCollisionShape(p.GEOM_BOX, halfExtents=table_half_extents)
+    # visId = p.createVisualShape(p.GEOM_BOX, halfExtents=table_half_extents)
+    # planeId = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=colId, baseVisualShapeIndex=visId, basePosition=[0, 0, -table_half_extents[2]])
+
+
+    new_position = [5.5, 5.5, 0.0]
+    scale_factor = 0.5
+    #current_orientation = p.getQuaternionFromEuler()
+
+    planeId = p.loadURDF(
+        "plane.urdf",
+        basePosition=new_position,
+        #baseOrientation=current_orientation,
+        globalScaling=scale_factor)
     textureId = p.loadTexture("assets/optical-table-texture.png")
     p.changeVisualShape(
         objectUniqueId=planeId,
@@ -168,6 +187,7 @@ def setup_env():
         textureUniqueId=textureId,
         specularColor=[0.8, 0.8, 0.8]
     )
+
     if useRealTimeSimulation:
         p.setRealTimeSimulation(1)
 
@@ -225,10 +245,12 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
                 random.uniform(DROP_Z_MIN_, DROP_Z_MAX_),
             ]
             orientation = p.getQuaternionFromEuler(
+                # rotate the rpy dropping to the plane: random.uniform(0.01, 3.0142)
+                # I don't consider drop right now. Just randomly in xy plane
                 [
-                    random.uniform(0.01, 3.0142),
-                    random.uniform(0.01, 3.0142),
-                    random.uniform(0.01, 3.0142),
+                    random.uniform(0.01, 0.1),
+                    random.uniform(0.01, 0.1),
+                    random.uniform(0.01, 3.0142)
                 ]
             )
             obj_id.append(p.loadURDF(ITEM_MODEL_PATH_, pose, orientation))

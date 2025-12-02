@@ -1,8 +1,8 @@
 {
     "data_generation": {
         "start_cycle": 1,
-        "end_cycle": 5,
-        "max_drop": 10
+        "end_cycle": 250,
+        "max_drop": 8
     },
     "folder_struct": {
         "dataset_folder_name": "data",
