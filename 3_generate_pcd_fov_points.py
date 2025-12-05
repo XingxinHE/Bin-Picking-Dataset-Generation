@@ -132,29 +132,29 @@ def samples(data, sample_num_point, dim=None):
 
 
 def samples_plus_normalized(data_label, num_point=4096):
-    data = data_label
+    data = data_label.copy()
     dim = data.shape[-1]
-    # print('dim',dim)
 
-    xyz_min = np.amin(data_label, axis=0)[0:3]
-    data[:, 0:3] -= xyz_min
+    # Calculate min/max for normalization features
+    xyz_min = np.amin(data[:, 0:3], axis=0)
+    data_shifted = data[:, 0:3] - xyz_min
+    max_vals = np.max(data_shifted, axis=0)
 
-    max_x = max(data[:, 0])
-    max_y = max(data[:, 1])
-    max_z = max(data[:, 2])
+    # Avoid divide by zero
+    max_vals[max_vals == 0] = 1.0
 
-    data_batch = samples(data, num_point, dim=dim)
-    # print('label_batch',label_batch,np.max(label_batch))
-    new_data_batch = np.zeros((data_batch.shape[0], num_point, dim + 3))
-    for b in range(data_batch.shape[0]):
-        new_data_batch[b, :, 3] = data_batch[b, :, 0] / max_x
-        new_data_batch[b, :, 4] = data_batch[b, :, 1] / max_y
-        new_data_batch[b, :, 5] = data_batch[b, :, 2] / max_z
+    norm_xyz = data_shifted / max_vals
 
-    new_data_batch[:, :, 0:3] = data_batch[:, :, 0:3]
-    new_data_batch[:, :, 6:] = data_batch[:, :, 3:]
+    # Construct extended data: [x, y, z, nx, ny, nz, idx, score]
+    extended_data = np.zeros((data.shape[0], dim + 3))
+    extended_data[:, 0:3] = data[:, 0:3] # Original XYZ (Camera Frame)
+    extended_data[:, 3:6] = norm_xyz     # Normalized XYZ (0-1)
+    extended_data[:, 6:] = data[:, 3:]   # Rest (idx, score)
 
-    return new_data_batch
+    # Sample from the extended data
+    data_batch = samples(extended_data, num_point)
+
+    return data_batch
 
 
 for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):

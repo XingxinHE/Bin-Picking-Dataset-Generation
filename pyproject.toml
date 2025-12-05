@@ -10,6 +10,9 @@ dependencies = [
     "pybullet",
     "matplotlib",
     "h5py>=3.15.1",
+    "polyscope>=2.5.0",
+    "trimesh>=4.10.0",
+    "python-fcl>=0.7.0.10",
 ]
 
 description = "A package for conducting research using robots for assembly"

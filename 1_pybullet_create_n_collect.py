@@ -52,13 +52,6 @@ CAMERA_PROJ_MATRIX_ = p.computeProjectionMatrixFOV(
     CAMERA_FOV_, CAMERA_ASPECT_, CAMERA_NEAR_, CAMERA_FAR_
 )
 
-
-# '''Box/Container parameters'''
-# BOX_MODEL_PATH_ = "model/tote_box/tote_box.urdf" # Removed for optical table setup
-# BOX_WIDTH_X_ = 0.6  # meters
-# BOX_WIDTH_Y_ = 0.4
-# BOX_SCALING_ = 2.0  # adjust scaling factor if box is too small
-
 # ''' Dropping parameters'''
 ITEM_MODEL_PATH_ = "model/teris/T.urdf"
 # Drop range adjusted for Zivid 2+ MR60 FOV (approx 58x47cm)
@@ -163,22 +156,12 @@ def setup_env():
     p.setPhysicsEngineParameter(numSolverIterations=30)
     p.setPhysicsEngineParameter(fixedTimeStep=TIMESTEP_)
 
-    # # HXX: table
-    # table_dims = [0.58, 0.47, 0.02] # Width, Length, Height (thickness)
-    # table_half_extents = [d/2 for d in table_dims]
-    # colId = p.createCollisionShape(p.GEOM_BOX, halfExtents=table_half_extents)
-    # visId = p.createVisualShape(p.GEOM_BOX, halfExtents=table_half_extents)
-    # planeId = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=colId, baseVisualShapeIndex=visId, basePosition=[0, 0, -table_half_extents[2]])
-
-
     new_position = [5.5, 5.5, 0.0]
     scale_factor = 0.5
-    #current_orientation = p.getQuaternionFromEuler()
 
     planeId = p.loadURDF(
         "plane.urdf",
         basePosition=new_position,
-        #baseOrientation=current_orientation,
         globalScaling=scale_factor)
     textureId = p.loadTexture("assets/optical-table-texture.png")
     p.changeVisualShape(
@@ -221,18 +204,6 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         # '''reset the environemnt'''
         setup_env()
 
-        # '''place a box at the middle'''
-        # Removed box for optical table setup
-        # boxStartPos = [0, 0, 0.01]
-        # boxStartOrientation = p.getQuaternionFromEuler([1.571, 0, 0])
-        # boxId = p.loadURDF(
-        #     BOX_MODEL_PATH_,
-        #     boxStartPos,
-        #     boxStartOrientation,
-        #     useFixedBase=1,
-        #     globalScaling=BOX_SCALING_,
-        # )
-        # boxPos, boxQuat = p.getBasePositionAndOrientation(boxId)
         time.sleep(0.1)
 
         # '''start the dropping loop'''
@@ -333,33 +304,40 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         gt_filename = str("%03d" % item_count) + ".txt"
         gt_poses_str = ""
         gt_matrix_poses_str = ""
+
+        # HXX: Get View Matrix (World -> Camera)
+        # PyBullet returns column-major list, reshape to 4x4
+        view_matrix = np.array(CAMERA_VIEW_MATRIX_).reshape(4, 4, order='F')
+
+        # HXX: Correction Matrix (OpenGL -> OpenCV)
+        # Rotate 180 deg around X axis: Y -> -Y, Z -> -Z
+        correction_matrix = np.array([
+            [1, 0, 0, 0],
+            [0, -1, 0, 0],
+            [0, 0, -1, 0],
+            [0, 0, 0, 1]
+        ])
+
         for idx in obj_id:
             boxPos, boxQuat = p.getBasePositionAndOrientation(idx)
-            gt_poses_str = (
-                gt_poses_str
-                + str(round(boxPos[0], 5))
-                + " "
-                + str(round(boxPos[1], 5))
-                + " "
-                + str(round(boxPos[2], 5))
-                + " "
-                + str(round(boxQuat[0], 5))
-                + " "
-                + str(round(boxQuat[1], 5))
-                + " "
-                + str(round(boxQuat[2], 5))
-                + " "
-                + str(round(boxQuat[3], 5))
-                + "\n"
-            )
 
-            # put into matrix form
-            matrix = np.zeros((4, 4))
-            matrix[:3, :3] = np.array(p.getMatrixFromQuaternion(boxQuat)).reshape(
-                (3, 3)
-            )
-            matrix[:3, 3] = boxPos
-            matrix[3, :] = [0, 0, 0, 1]
+            # Create World Matrix
+            world_matrix = np.eye(4)
+            world_matrix[:3, :3] = np.array(p.getMatrixFromQuaternion(boxQuat)).reshape((3, 3))
+            world_matrix[:3, 3] = boxPos
+
+            # Transform to Camera Frame
+            # T_cam = T_correction * T_view * T_world
+            cam_matrix = correction_matrix @ view_matrix @ world_matrix
+
+            # Extract new pos and quat for gt_poses
+            new_pos = cam_matrix[:3, 3]
+            new_rot_mat = cam_matrix[:3, :3]
+
+            # Convert rotation matrix to quaternion
+            gt_poses_str += f"{new_pos[0]:.5f} {new_pos[1]:.5f} {new_pos[2]:.5f} {boxQuat[0]:.5f} {boxQuat[1]:.5f} {boxQuat[2]:.5f} {boxQuat[3]:.5f}\n"
+
+            matrix = cam_matrix
             gt_matrix_poses_str += (
                 str(round(matrix[0][0], 5))
                 + " "
