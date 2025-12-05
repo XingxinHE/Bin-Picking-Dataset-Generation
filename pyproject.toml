@@ -13,6 +13,8 @@ dependencies = [
     "polyscope>=2.5.0",
     "trimesh>=4.10.0",
     "python-fcl>=0.7.0.10",
+    "rtree>=1.4.1",
+    "scipy>=1.15.3",
 ]
 
 description = "A package for conducting research using robots for assembly"
