@@ -6,6 +6,7 @@ import os
 import matplotlib.image as mp
 import numpy as np
 import json
+import cv2
 
 # load data & environment generation setting from json file
 f = open("data_generation_setting.json")
@@ -174,6 +175,54 @@ def setup_env():
     if useRealTimeSimulation:
         p.setRealTimeSimulation(1)
 
+    create_virtual_frustum()
+
+
+def create_virtual_frustum():
+    # Calculate FOV bounds at Z=0
+    # Camera is at Z = CAMERA_EYE_POSITION_[2]
+    # Looking down at Z=0
+
+    z_height = CAMERA_EYE_POSITION_[2]
+    fov_rad = np.deg2rad(CAMERA_FOV_)
+
+    # Vertical height of the view at Z=0
+    # tan(fov/2) = (h/2) / z
+    view_height = 2 * z_height * np.tan(fov_rad / 2)
+
+    # Horizontal width of the view at Z=0
+    view_width = view_height * CAMERA_ASPECT_
+
+    print(f"Virtual Frustum at Z=0: Width={view_width:.3f}, Height={view_height:.3f}")
+
+    # Create 4 walls
+    # Wall thickness
+    thickness = 0.1
+    height = 0.5 # Wall height
+
+    # Wall positions (centers)
+    # Top (Y+)
+    pos_top = [0, view_height/2 + thickness/2, height/2]
+    # Bottom (Y-)
+    pos_bottom = [0, -view_height/2 - thickness/2, height/2]
+    # Right (X+)
+    pos_right = [view_width/2 + thickness/2, 0, height/2]
+    # Left (X-)
+    pos_left = [-view_width/2 - thickness/2, 0, height/2]
+
+    # Collision shapes
+    # Top/Bottom walls: Width = view_width + 2*thickness, Thickness = thickness
+    col_top_bottom = p.createCollisionShape(p.GEOM_BOX, halfExtents=[view_width/2 + thickness, thickness/2, height/2])
+
+    # Left/Right walls: Length = view_height, Thickness = thickness
+    col_left_right = p.createCollisionShape(p.GEOM_BOX, halfExtents=[thickness/2, view_height/2, height/2])
+
+    # Create bodies (Invisible, so no visual shape)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_top_bottom, basePosition=pos_top)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_top_bottom, basePosition=pos_bottom)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, basePosition=pos_right)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, basePosition=pos_left)
+
 
 for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
     # create sub cycle folders
@@ -285,13 +334,21 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         )
 
         # ''' save rgb,depth,seg images '''
+        # ''' save rgb,depth,seg images '''
         mp.imsave(
             os.path.join(cycle_rgb_path, str("%03d_rgb.png" % item_count)), rgb_opengl
         )
-        mp.imsave(
+
+        # Save depth as uint16
+        # Normalize to 0-65535
+        depth_uint16 = (depth_opengl - CAMERA_NEAR_) / (CAMERA_FAR_ - CAMERA_NEAR_) * 65535
+        depth_uint16 = np.clip(depth_uint16, 0, 65535).astype(np.uint16)
+
+        cv2.imwrite(
             os.path.join(cycle_depth_path, str("%03d_depth.png" % item_count)),
-            depth_opengl,
+            depth_uint16,
         )
+
         mp.imsave(
             os.path.join(cycle_seg_path, str("%03d_segmentation.png" % item_count)),
             seg_opengl,

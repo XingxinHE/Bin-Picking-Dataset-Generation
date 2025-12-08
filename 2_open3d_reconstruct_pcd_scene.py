@@ -80,9 +80,16 @@ pcd_cad = mesh.sample_points_uniformly(number_of_points=CAD_PCD_SIZE_)
 pcd_cad.voxel_down_sample(VOXEL_SIZE_)
 # o3d.visualization.draw_geometries([pcd_cad])
 model_pc = np.asarray(pcd_cad.points)
+model_normals = np.asarray(pcd_cad.normals) # Get normals
 ones = np.ones([model_pc.shape[0], 1])
 # ones = np.zeros([model_pc.shape[0],1])
 model_pc = np.concatenate([model_pc, ones], axis=1)
+
+# Tuning parameter for vertical face density
+# 1.0 = physical density (proportional to projected area)
+# > 1.0 = suppress vertical faces more strongly
+# < 1.0 = keep more vertical faces
+VERTICALITY_FACTOR = 0.2
 
 for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
     cycle_gt_matrix_path = os.path.join(
@@ -104,9 +111,30 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         for index in range(Trans.shape[0]):
             M = Trans[index, :, :]
             points = model_pc.copy()
+            normals = model_normals.copy()
+
+            # Transform points
             part = np.matmul(M, points.transpose())
             part = part.T
             part = part[:, :3]
+
+            # Transform normals (Rotation only)
+            R = M[:3, :3]
+            part_normals = np.matmul(R, normals.transpose()).T
+
+            # Filter based on verticality (dot product with Z axis)
+            # Camera looks along Z (or -Z), so we care about the Z component of the normal.
+            # Surfaces parallel to Z have normal_z ~ 0.
+            # Surfaces facing camera have normal_z ~ 1 or -1.
+            # We want density proportional to projected area ~ |normal_z|
+
+            nz = part_normals[:, 2]
+            probs = np.abs(nz) ** VERTICALITY_FACTOR
+
+            # Random sampling based on probability
+            mask = np.random.rand(len(probs)) < probs
+
+            part = part[mask]
 
             center = M[0:3, -1]
             center_score = get_center_score(part[:, :3], center, max_dis=ITEM_MAX_R_)
