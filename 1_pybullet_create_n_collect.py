@@ -8,6 +8,30 @@ import numpy as np
 import json
 import cv2
 
+# Import shared camera configuration
+from camera_config import (
+    CAMERA_IMG_WIDTH, CAMERA_IMG_HEIGHT,
+    CAMERA_FOV_V_DEG, CAMERA_ASPECT,
+    CAMERA_NEAR, CAMERA_FAR,
+    CAMERA_EYE_POSITION, CAMERA_TARGET_POSITION, CAMERA_UP_VECTOR,
+    TARGET_DISTANCE, FOV_WIDTH_M, FOV_HEIGHT_M,
+    print_camera_config
+)
+
+# Print camera config for verification
+print_camera_config()
+
+# Alias for backward compatibility
+CAMERA_IMG_WIDTH_ = CAMERA_IMG_WIDTH
+CAMERA_IMG_HEIGHT_ = CAMERA_IMG_HEIGHT
+CAMERA_FOV_ = CAMERA_FOV_V_DEG
+CAMERA_ASPECT_ = CAMERA_ASPECT
+CAMERA_NEAR_ = CAMERA_NEAR
+CAMERA_FAR_ = CAMERA_FAR
+CAMERA_EYE_POSITION_ = CAMERA_EYE_POSITION
+CAMERA_TARGET_POSITION_ = CAMERA_TARGET_POSITION
+CAMERA_UP_VECTOR_ = CAMERA_UP_VECTOR
+
 # load data & environment generation setting from json file
 f = open("data_generation_setting.json")
 json_setting = json.load(f)
@@ -21,28 +45,6 @@ if useGUI:
     p.connect(p.GUI)
 else:
     p.connect(p.DIRECT)
-
-# ''' virtual camera parameter in pybullet'''
-CAMERA_IMG_WIDTH_ = 2448  # px
-CAMERA_IMG_HEIGHT_ = 2048  # px
-
-CAMERA_FOV_ = 43  # Zivid 2+ MR60 vertical FOV approx 43 degrees
-CAMERA_ASPECT_ = (
-    CAMERA_IMG_WIDTH_ / CAMERA_IMG_HEIGHT_
-)  # describes the camera aspect ratio
-CAMERA_NEAR_ = 0.02
-CAMERA_FAR_ = 2.0  # describe the minimum and maximum distance which the camera will render objects
-CAMERA_EYE_POSITION_ = [
-    0,
-    0,
-    0.65,
-]  # physical location of the camera in x, y, and z coordinates (65cm)
-CAMERA_TARGET_POSITION_ = [
-    0,
-    0,
-    0,
-]  # the point that we wish the camera to face. [0, 0, 0] is origin
-CAMERA_UP_VECTOR_ = [0, 1, 0]  # describe the orientation of the camera
 
 CAMERA_VIEW_MATRIX_ = p.computeViewMatrix(
     cameraEyePosition=CAMERA_EYE_POSITION_,
@@ -140,6 +142,14 @@ if not os.path.exists(SEG_IMG_FOLDER_PATH_):
 if not os.path.exists(GT_POSES_FOLDER_PATH_):
     os.makedirs(GT_POSES_FOLDER_PATH_)
 
+# Load Class Mapping
+CLASS_MAPPING_FILE = os.path.join(ITEM_FOLDER_PATH_, "class.json")
+CLASS_MAPPING = {}
+if os.path.exists(CLASS_MAPPING_FILE):
+    with open(CLASS_MAPPING_FILE, 'r') as f:
+        CLASS_MAPPING = json.load(f)
+else:
+    print("Warning: class.json not found. Defaulting to empty mapping.")
 
 def setup_env():
     p.resetSimulation()
@@ -224,6 +234,48 @@ def create_virtual_frustum():
     p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, basePosition=pos_left)
 
 
+def get_camera_image():
+    return p.getCameraImage(
+        CAMERA_IMG_WIDTH_,
+        CAMERA_IMG_HEIGHT_,
+        viewMatrix=CAMERA_VIEW_MATRIX_,
+        projectionMatrix=CAMERA_PROJ_MATRIX_,
+        lightDirection=[-0.0, -1.0, -1.0],
+        lightColor=[1.0, 1.0, 1.0],
+        lightDistance=2,
+        shadow=1,
+        renderer=p.ER_BULLET_HARDWARE_OPENGL,
+    )
+
+def calculate_visibility_new(obj_ids, full_seg_img):
+    """
+    Calculate visibility score: V_i = N_i / N_max
+    where N_i is the number of pixels for object i,
+    and N_max is the max number of pixels for any object in the scene.
+    """
+    visibility_scores = {}
+
+    # Count pixels for each object
+    pixel_counts = {}
+    max_pixels = 0
+
+    for obj_id in obj_ids:
+        count = np.sum(full_seg_img == obj_id)
+        pixel_counts[obj_id] = count
+        if count > max_pixels:
+            max_pixels = count
+
+    # Calculate scores
+    for obj_id in obj_ids:
+        if max_pixels > 0:
+            score = pixel_counts[obj_id] / max_pixels
+        else:
+            score = 0.0
+        visibility_scores[obj_id] = score
+
+    return visibility_scores
+
+
 for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
     # create sub cycle folders
     cycle_rgb_path = os.path.join(RGB_IMG_FOLDER_PATH_, "cycle_%04d" % cycle_idx)
@@ -276,17 +328,7 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             obj_id.append(p.loadURDF(ITEM_MODEL_PATH_, pose, orientation))
             time.sleep(0.25)  # to prevent all objects drop at the same time
             count += 1
-            images = p.getCameraImage(
-                CAMERA_IMG_WIDTH_,
-                CAMERA_IMG_HEIGHT_,
-                viewMatrix=CAMERA_VIEW_MATRIX_,
-                projectionMatrix=CAMERA_PROJ_MATRIX_,
-                lightDirection=[-0.0, -1.0, -1.0],
-                lightColor=[1.0, 1.0, 1.0],
-                lightDistance=2,
-                shadow=1,
-                renderer=p.ER_BULLET_HARDWARE_OPENGL,
-            )
+
             if useRealTimeSimulation:
                 time.sleep(TIMESTEP_)
             else:
@@ -298,23 +340,14 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         # '''give it some time (3sec) to let the physics settle down'''
         time_start = time.time()
         while time.time() < (time_start + 3.0):
-            images = p.getCameraImage(
-                CAMERA_IMG_WIDTH_,
-                CAMERA_IMG_HEIGHT_,
-                viewMatrix=CAMERA_VIEW_MATRIX_,
-                projectionMatrix=CAMERA_PROJ_MATRIX_,
-                lightDirection=[-0.0, -1.0, -1.0],
-                lightColor=[1.0, 1.0, 1.0],
-                lightDistance=2,
-                shadow=1,
-                renderer=p.ER_BULLET_HARDWARE_OPENGL,
-            )
             if useRealTimeSimulation:
                 time.sleep(TIMESTEP_)
             else:
                 p.stepSimulation()
 
         # ''' end of this dropping cycle, start of data saving process '''
+        images = get_camera_image()
+
         # ''' image convertion '''
         rgb_opengl = (
             np.reshape(images[2], (CAMERA_IMG_HEIGHT_, CAMERA_IMG_WIDTH_, 4))
@@ -330,10 +363,12 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             / (CAMERA_FAR_ - (CAMERA_FAR_ - CAMERA_NEAR_) * depth_buffer_opengl)
         )
         seg_opengl = (
-            np.reshape(images[4], [CAMERA_IMG_HEIGHT_, CAMERA_IMG_WIDTH_]) * 1.0 / 255.0
+            np.reshape(images[4], [CAMERA_IMG_HEIGHT_, CAMERA_IMG_WIDTH_])
         )
 
-        # ''' save rgb,depth,seg images '''
+        # Calculate Visibility Scores (New Logic)
+        vis_scores = calculate_visibility_new(obj_id, seg_opengl)
+
         # ''' save rgb,depth,seg images '''
         mp.imsave(
             os.path.join(cycle_rgb_path, str("%03d_rgb.png" % item_count)), rgb_opengl
@@ -349,18 +384,22 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             depth_uint16,
         )
 
-        mp.imsave(
+        # Save segmentation as uint16 (to support > 255 IDs if needed)
+        # Note: IDs start from 5, so values are low (5, 6, 7...).
+        # Image will appear black in standard viewers.
+        cv2.imwrite(
             os.path.join(cycle_seg_path, str("%03d_segmentation.png" % item_count)),
-            seg_opengl,
+            seg_opengl.astype(np.uint16),
         )
 
         # ''' save each cycle with different number of object poses (target object only, without bin pose) into .txt '''
         # ''' format : x y z quat_x quat_y quat_z quat_w'''
         # ''' format : matrix 4x4 '''
 
-        gt_filename = str("%03d" % item_count) + ".txt"
-        gt_poses_str = ""
-        gt_matrix_poses_str = ""
+        gt_filename = str("%03d" % item_count) + ".csv" # Changed to .csv
+
+        # CSV Header (Removed visibility_score_o)
+        gt_poses_str = "id,class,x,y,z,rot_x_axis_1,rot_x_axis_2,rot_x_axis_3,rot_y_axis_1,rot_y_axis_2,rot_y_axis_3,rot_z_axis_1,rot_z_axis_2,rot_z_axis_3,visibility_score_p\n"
 
         # HXX: Get View Matrix (World -> Camera)
         # PyBullet returns column-major list, reshape to 4x4
@@ -387,56 +426,29 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             # T_cam = T_correction * T_view * T_world
             cam_matrix = correction_matrix @ view_matrix @ world_matrix
 
-            # Extract new pos and quat for gt_poses
+            # Extract new pos and rot
             new_pos = cam_matrix[:3, 3]
             new_rot_mat = cam_matrix[:3, :3]
 
-            # Convert rotation matrix to quaternion
-            gt_poses_str += f"{new_pos[0]:.5f} {new_pos[1]:.5f} {new_pos[2]:.5f} {boxQuat[0]:.5f} {boxQuat[1]:.5f} {boxQuat[2]:.5f} {boxQuat[3]:.5f}\n"
+            # Flatten Rotation Matrix
+            rot_flat = new_rot_mat.flatten() # x1, x2, x3, y1, y2, y3, z1, z2, z3
 
-            matrix = cam_matrix
-            gt_matrix_poses_str += (
-                str(round(matrix[0][0], 5))
-                + " "
-                + str(round(matrix[0][1], 5))
-                + " "
-                + str(round(matrix[0][2], 5))
-                + " "
-                + str(round(matrix[0][3], 5))
-                + " \n"
-                + str(round(matrix[1][0], 5))
-                + " "
-                + str(round(matrix[1][1], 5))
-                + " "
-                + str(round(matrix[1][2], 5))
-                + " "
-                + str(round(matrix[1][3], 5))
-                + " \n"
-                + str(round(matrix[2][0], 5))
-                + " "
-                + str(round(matrix[2][1], 5))
-                + " "
-                + str(round(matrix[2][2], 5))
-                + " "
-                + str(round(matrix[2][3], 5))
-                + " \n"
-                + str(round(matrix[3][0], 5))
-                + " "
-                + str(round(matrix[3][1], 5))
-                + " "
-                + str(round(matrix[3][2], 5))
-                + " "
-                + str(round(matrix[3][3], 5))
-                + " \n"
-            )
-            gt_matrix_poses_str += "\n"
+            # Get Class Name and ID
+            # Assuming ITEM_MODEL_PATH_ is like "model/teris/T.urdf"
+            class_name = os.path.basename(ITEM_MODEL_PATH_).split('.')[0] # "T"
 
-        # write xyzquat into txt
+            # Get Visibility
+            vis_p = vis_scores.get(idx, 0.0)
+
+            # Append to CSV String
+            # id,class,x,y,z,rot...,vis_p
+            gt_poses_str += f"{idx},{class_name},{new_pos[0]:.5f},{new_pos[1]:.5f},{new_pos[2]:.5f},"
+            gt_poses_str += f"{rot_flat[0]:.5f},{rot_flat[1]:.5f},{rot_flat[2]:.5f},"
+            gt_poses_str += f"{rot_flat[3]:.5f},{rot_flat[4]:.5f},{rot_flat[5]:.5f},"
+            gt_poses_str += f"{rot_flat[6]:.5f},{rot_flat[7]:.5f},{rot_flat[8]:.5f},"
+            gt_poses_str += f"{vis_p:.5f}\n"
+
+        # write csv
         f = open(os.path.join(cycle_gt_path, gt_filename), "w")
         f.write(gt_poses_str)
-        f.close()
-
-        # write matrix into txt
-        f = open(os.path.join(cycle_gt_matrix_path, gt_filename), "w")
-        f.write(gt_matrix_poses_str)
         f.close()
