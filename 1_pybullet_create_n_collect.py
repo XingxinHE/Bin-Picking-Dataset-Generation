@@ -80,6 +80,7 @@ MAX_DROP_ = json_setting["data_generation"][
 
 # '''path for save img data'''
 DATASET_FOLDER_NAME_ = json_setting["folder_struct"]["dataset_folder_name"]
+MODEL_FOLDER_NAME_ = json_setting["folder_struct"]["model_folder_name"]
 ITEM_NAME_ = json_setting["folder_struct"]["item_name"]
 TRAIN_TEST_FOLDER_NAME_ = json_setting["folder_struct"]["train_test_folder_name"]
 RGB_IMG_FOLDER_NAME_ = json_setting["folder_struct"]["rgb_img_folder_name"]
@@ -90,9 +91,12 @@ GT_MATRIX_POSES_FOLDER_NAME_ = json_setting["folder_struct"][
     "gt_matrix_poses_folder_name"
 ]
 
+TYPES_TERIS_ = json_setting["model_param"]["types_teris"]
+
 CURR_DIR_ = os.path.dirname(os.path.abspath(__file__))
 DATASET_FOLDER_PATH_ = os.path.join(CURR_DIR_, DATASET_FOLDER_NAME_)
 ITEM_FOLDER_PATH_ = os.path.join(CURR_DIR_, DATASET_FOLDER_NAME_, ITEM_NAME_)
+MODEL_FOLDER_PATH_ = os.path.join(CURR_DIR_, MODEL_FOLDER_NAME_, ITEM_NAME_)
 TRAIN_TEST_FOLDER_PATH_ = os.path.join(
     CURR_DIR_, DATASET_FOLDER_NAME_, ITEM_FOLDER_PATH_, TRAIN_TEST_FOLDER_NAME_
 )
@@ -309,6 +313,9 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
 
         # '''start the dropping loop'''
         obj_id = []
+        # Store class name for each object ID
+        obj_id_to_class = {}
+
         count = 0
         for count in range(1, item_count + 1):
             pose = [
@@ -325,7 +332,15 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
                     random.uniform(0.01, 3.0142)
                 ]
             )
-            obj_id.append(p.loadURDF(ITEM_MODEL_PATH_, pose, orientation))
+
+            # Randomly pick one type
+            type_name = random.choice(TYPES_TERIS_)
+            urdf_path = os.path.join(MODEL_FOLDER_PATH_, f"{type_name}.urdf")
+            
+            new_id = p.loadURDF(urdf_path, pose, orientation)
+            obj_id.append(new_id)
+            obj_id_to_class[new_id] = type_name
+            
             time.sleep(0.25)  # to prevent all objects drop at the same time
             count += 1
 
@@ -434,8 +449,7 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             rot_flat = new_rot_mat.flatten() # x1, x2, x3, y1, y2, y3, z1, z2, z3
 
             # Get Class Name and ID
-            # Assuming ITEM_MODEL_PATH_ is like "model/teris/T.urdf"
-            class_name = os.path.basename(ITEM_MODEL_PATH_).split('.')[0] # "T"
+            class_name = obj_id_to_class[idx]
 
             # Get Visibility
             vis_p = vis_scores.get(idx, 0.0)

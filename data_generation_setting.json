@@ -19,7 +19,6 @@
         "h5_folder_name": "h5"
     },
     "model_param": {
-        "model_filename": "T.obj",
-        "max_d": 0.1
+        "types_teris": ["I", "J", "O", "S", "T"]
     }
 }
