@@ -29,8 +29,14 @@ def _interpolate_fov(specs: dict, target_mm: float) -> tuple:
     Returns:
         (width_m, height_m) tuple in meters
     """
-    # Get sorted list of available distances
-    available = sorted([int(k) for k in specs.keys()])
+    # Get sorted list of available distances (filter out non-integer keys like 'near_limit')
+    available = []
+    for k in specs.keys():
+        try:
+            available.append(int(k))
+        except ValueError:
+            continue
+    available.sort()
 
     # Exact match
     if int(target_mm) in available:

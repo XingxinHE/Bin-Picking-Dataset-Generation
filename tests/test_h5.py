@@ -293,5 +293,104 @@ def test_point_z_within_working_distance(h5_files):
             f"Invalid z value in {h5_path}: min z = {z_min:.4f} (should be >= 0)"
 
         # All z values should be < TARGET_DISTANCE (below camera)
-        assert z_max < TARGET_DISTANCE, \
-            f"Invalid z value in {h5_path}: max z = {z_max:.4f} (should be < {TARGET_DISTANCE})"
+    assert z_max < TARGET_DISTANCE, \
+        f"Invalid z value in {h5_path}: max z = {z_max:.4f} (should be < {TARGET_DISTANCE})"
+
+
+def test_gt_centroid_alignment(h5_files):
+    """
+    Verify that the centroid of the point cloud for each object matches
+    the Ground Truth translation from the labels.
+
+    This ensures that the coordinate systems (camera vs object) are aligned.
+    """
+    for h5_path in h5_files:
+        with h5py.File(h5_path, 'r') as f:
+            data = f['data'][:]      # (N, 3)
+            labels = f['labels'][:]  # (N, 15)
+
+        points = data[:, :3]
+        obj_ids = labels[:, 13].astype(int)
+
+        unique_obj_ids = np.unique(obj_ids)
+
+        for obj_id in unique_obj_ids:
+            # Get points for this object
+            mask = obj_ids == obj_id
+            obj_points = points[mask]
+
+            if len(obj_points) == 0:
+                continue
+
+            # Calculate centroid of points
+            centroid = np.mean(obj_points, axis=0)
+
+            # Get GT translation (from first point of this object)
+            # labels: [x, y, z, r11, r12, r13, ..., vis, obj_id, class_id]
+            first_idx = np.where(mask)[0][0]
+            gt_trans = labels[first_idx, 0:3]
+
+            # Calculate distance between centroid and GT translation
+            dist = np.linalg.norm(centroid - gt_trans)
+            print(f"Distance between centroid and GT translation: {dist:.4f}m")
+
+            # Tolerance: 5mm (0.005m)
+            # Note: Centroid might not be exactly at origin of mesh, but for these
+            # symmetric/centered blocks it should be close.
+            # If mesh origin is not center of mass, this test might need adjustment.
+            # But for detecting large misalignments (like missing coordinate flip),
+            # this should be sufficient.
+            # Tolerance: 5cm (0.05m)
+            # Relaxed to account for:
+            # 1. Surface bias (Z-offset)
+            # 2. Shape asymmetry (XY-offset for T, L, J blocks where centroid != origin)
+            assert dist < 0.05, \
+                f"Mismatch in {h5_path} for obj {obj_id}: dist={dist:.4f}m (Centroid={centroid}, GT={gt_trans})"
+
+
+def test_z_range_compliance(h5_files):
+    """
+    Verify that all point cloud data and Ground Truth translations
+    are within the Z-range limits defined in zivid/mr_460.json.
+    """
+    # Load Zivid specs
+    zivid_spec_file = os.path.join(os.path.dirname(__file__), "..", "zivid", "mr_460.json")
+    if not os.path.exists(zivid_spec_file):
+        pytest.skip(f"Zivid spec file not found: {zivid_spec_file}")
+
+    with open(zivid_spec_file, 'r') as f:
+        specs = json.load(f)
+
+    # Get limits in meters (default to safe values if missing)
+    near_limit_mm = specs.get("near_limit", 300)
+    far_limit_mm = specs.get("far_limit", 1100)
+
+    near_limit_m = near_limit_mm / 1000.0
+    far_limit_m = far_limit_mm / 1000.0
+
+    print(f"Checking Z-range compliance: [{near_limit_m:.3f}m, {far_limit_m:.3f}m]")
+
+    for h5_path in h5_files:
+        with h5py.File(h5_path, 'r') as f:
+            data = f['data'][:]      # (N, 3)
+            labels = f['labels'][:]  # (N, 15)
+
+        # Check Point Cloud Z values
+        z_values = data[:, 2]
+        min_z = np.min(z_values)
+        max_z = np.max(z_values)
+
+        assert min_z >= near_limit_m, \
+            f"Point cloud Z below near limit in {h5_path}: min_z={min_z:.4f}m < {near_limit_m:.4f}m"
+        assert max_z <= far_limit_m, \
+            f"Point cloud Z above far limit in {h5_path}: max_z={max_z:.4f}m > {far_limit_m:.4f}m"
+
+        # Check GT Translation Z values
+        gt_z_values = labels[:, 2]
+        min_gt_z = np.min(gt_z_values)
+        max_gt_z = np.max(gt_z_values)
+
+        assert min_gt_z >= near_limit_m, \
+            f"GT Z below near limit in {h5_path}: min_gt_z={min_gt_z:.4f}m < {near_limit_m:.4f}m"
+        assert max_gt_z <= far_limit_m, \
+            f"GT Z above far limit in {h5_path}: max_gt_z={max_gt_z:.4f}m > {far_limit_m:.4f}m"

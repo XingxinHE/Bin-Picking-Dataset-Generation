@@ -1,7 +1,7 @@
 {
     "data_generation": {
         "start_cycle": 1,
-        "end_cycle": 2,
+        "end_cycle": 1,
         "max_drop": 10
     },
     "folder_struct": {
@@ -19,6 +19,13 @@
         "h5_folder_name": "h5"
     },
     "model_param": {
-        "types_teris": ["I", "J", "O", "S", "T"]
-    }
+        "types_teris": [
+            "I",
+            "J",
+            "O",
+            "S",
+            "T"
+        ]
+    },
+    "dropping_option": "packing"
 }

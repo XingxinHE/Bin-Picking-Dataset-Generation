@@ -146,6 +146,14 @@ def main():
         transform = np.eye(4)
         transform[:3, :3] = rot
         transform[:3, 3] = trans
+
+        # Apply URDF fix: Rotate mesh 180 deg around X axis
+        # The URDF has <origin rpy="3.14159 0 0" ... /> for visual mesh
+        # We need to apply this to the raw mesh before placing it in the world
+        urdf_fix = np.eye(4)
+        urdf_fix[:3, :3] = trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0])[:3, :3]
+        mesh.apply_transform(urdf_fix)
+
         mesh.apply_transform(transform)
 
         # Register with Polyscope

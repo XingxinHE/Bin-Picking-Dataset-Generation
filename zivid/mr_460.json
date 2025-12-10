@@ -18,5 +18,7 @@
   "1100": {
     "width": 1096,
     "height": 858
-  }
+  },
+  "near_limit": 300,
+  "far_limit": 1100
 }

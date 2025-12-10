@@ -7,6 +7,7 @@ import matplotlib.image as mp
 import numpy as np
 import json
 import cv2
+import math
 
 # Import shared camera configuration
 from camera_config import (
@@ -305,6 +306,8 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
     if not os.path.exists(os.path.join(cycle_gt_matrix_path)):
         os.makedirs(os.path.join(cycle_gt_matrix_path))
 
+    heuristic_max_items = None
+
     for item_count in range(1, MAX_DROP_ + 1):
         # '''reset the environemnt'''
         setup_env()
@@ -312,38 +315,134 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         time.sleep(0.1)
 
         # '''start the dropping loop'''
+        # ''' drop items '''
+        # Get list of items to drop from settings
+        dropping_option = json_setting.get("dropping_option", "falling")
+        print(f"Dropping option: {dropping_option}")
+
         obj_id = []
-        # Store class name for each object ID
-        obj_id_to_class = {}
+        obj_id_to_class = {} # Map obj_id to class_name
 
-        count = 0
-        for count in range(1, item_count + 1):
-            pose = [
-                random.uniform(DROP_X_MIN_, DROP_X_MAX_),
-                random.uniform(DROP_Y_MIN_, DROP_Y_MAX_),
-                random.uniform(DROP_Z_MIN_, DROP_Z_MAX_),
-            ]
-            orientation = p.getQuaternionFromEuler(
-                # rotate the rpy dropping to the plane: random.uniform(0.01, 3.0142)
-                # I don't consider drop right now. Just randomly in xy plane
-                [
-                    random.uniform(0.01, 0.1),
-                    random.uniform(0.01, 0.1),
-                    random.uniform(0.01, 3.0142)
+        if dropping_option == "falling":
+            # Falling Mode: Incremental drops, stacked vertically
+            # Loop from 1 to item_count (incremental)
+            # The outer loop is: for item_count in range(1, MAX_DROP_ + 1):
+            # So inside here we just need to generate 'item_count' items.
+
+            for _ in range(item_count):
+                # Randomly select a class
+                class_name = random.choice(TYPES_TERIS_)
+                urdf_path = os.path.join(MODEL_FOLDER_PATH_, f"{class_name}.urdf")
+
+                if not os.path.exists(urdf_path):
+                    raise ValueError(f"URDF file not found: {urdf_path}")
+
+                # Random position and orientation (falling)
+                pos = [
+                    random.uniform(DROP_X_MIN_, DROP_X_MAX_),
+                    random.uniform(DROP_Y_MIN_, DROP_Y_MAX_),
+                    random.uniform(DROP_Z_MIN_, DROP_Z_MAX_),
                 ]
-            )
+                orn = p.getQuaternionFromEuler(
+                    [
+                        random.uniform(0.01, 0.1),
+                        random.uniform(0.01, 0.1),
+                        random.uniform(0.01, 3.0142)
+                    ]
+                )
 
-            # Randomly pick one type
-            type_name = random.choice(TYPES_TERIS_)
-            urdf_path = os.path.join(MODEL_FOLDER_PATH_, f"{type_name}.urdf")
-            
-            new_id = p.loadURDF(urdf_path, pose, orientation)
-            obj_id.append(new_id)
-            obj_id_to_class[new_id] = type_name
-            
-            time.sleep(0.25)  # to prevent all objects drop at the same time
+                new_id = p.loadURDF(urdf_path, pos, orn)
+                obj_id.append(new_id)
+                obj_id_to_class[new_id] = class_name
+
+                # Let physics settle
+                for _ in range(10):
+                    p.stepSimulation()
+
+        elif dropping_option == "packing":
+            # Packing Mode: Flat placement, no overlap
+            # Determine target count based on heuristic (only for packing mode)
+            target_count = item_count
+            if heuristic_max_items is not None:
+                target_count = heuristic_max_items
+                print(f"Using heuristic max items: {target_count} (instead of {item_count})")
+
+            # Z height for flat placement
+            PACK_Z = 0.05
+
+            for _ in range(target_count):
+                class_name = random.choice(TYPES_TERIS_)
+                urdf_path = os.path.join(MODEL_FOLDER_PATH_, f"{class_name}.urdf")
+
+                if not os.path.exists(urdf_path):
+                    raise ValueError(f"URDF file not found: {urdf_path}")
+
+                # Try to place without collision
+                max_retries = 30
+                placed = False
+
+                for _ in range(max_retries):
+                    # Random position in X/Y
+                    pos = [
+                        random.uniform(DROP_X_MIN_, DROP_X_MAX_),
+                        random.uniform(DROP_Y_MIN_, DROP_Y_MAX_),
+                        PACK_Z,
+                    ]
+
+                    # Flat orientation (random Yaw only)
+                    orn = p.getQuaternionFromEuler(
+                        [
+                            0, # Roll = 0
+                            0, # Pitch = 0
+                            random.uniform(-math.pi, math.pi), # Random Yaw
+                        ]
+                    )
+
+                    temp_id = p.loadURDF(urdf_path, pos, orn)
+                    p.performCollisionDetection()
+                    contact_points = p.getContactPoints(temp_id)
+
+                    has_collision = False
+                    for cp in contact_points:
+                        # cp[2] is bodyB unique id
+                        other_id = cp[2]
+                        # Ignore collision with plane (which is usually the first body loaded)
+                        # We can check if other_id is in obj_id list (existing objects)
+                        if other_id in obj_id:
+                            has_collision = True
+                            break
+
+                    if not has_collision:
+                        # Valid placement
+                        obj_id.append(temp_id)
+                        obj_id_to_class[temp_id] = class_name
+                        placed = True
+                        break
+                    else:
+                        # Collision, remove and retry
+                        p.removeBody(temp_id)
+
+                if not placed:
+                    print(f"Warning: Could not pack item {len(obj_id)+1}/{target_count}. Scene might be full.")
+                    break # Stop adding items for this scene if we can't fit more
+
+            # Optimization: Update heuristic if we couldn't place all items
+            if len(obj_id) < target_count:
+                if heuristic_max_items is None:
+                    heuristic_max_items = len(obj_id)
+                    print(f"Optimization: Packing limit reached at {heuristic_max_items}. Capping future drops.")
+                elif len(obj_id) < heuristic_max_items:
+                     # Should not happen if logic is correct, but just in case
+                     heuristic_max_items = len(obj_id)
+
+        else:
+            print(f"Error: Unknown dropping_option: {dropping_option}")
+            continue
+
+        # Simulation loop to settle
+        count = 0
+        while count < 200:
             count += 1
-
             if useRealTimeSimulation:
                 time.sleep(TIMESTEP_)
             else:
@@ -416,10 +515,6 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
         # CSV Header (Removed visibility_score_o)
         gt_poses_str = "id,class,x,y,z,rot_x_axis_1,rot_x_axis_2,rot_x_axis_3,rot_y_axis_1,rot_y_axis_2,rot_y_axis_3,rot_z_axis_1,rot_z_axis_2,rot_z_axis_3,visibility_score_p\n"
 
-        # HXX: Get View Matrix (World -> Camera)
-        # PyBullet returns column-major list, reshape to 4x4
-        view_matrix = np.array(CAMERA_VIEW_MATRIX_).reshape(4, 4, order='F')
-
         # HXX: Correction Matrix (OpenGL -> OpenCV)
         # Rotate 180 deg around X axis: Y -> -Y, Z -> -Z
         correction_matrix = np.array([
@@ -428,6 +523,10 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             [0, 0, -1, 0],
             [0, 0, 0, 1]
         ])
+
+        # HXX: Get View Matrix (World -> Camera)
+        # PyBullet returns column-major list, reshape to 4x4
+        view_matrix = np.array(CAMERA_VIEW_MATRIX_).reshape(4, 4, order='F')
 
         for idx in obj_id:
             boxPos, boxQuat = p.getBasePositionAndOrientation(idx)
