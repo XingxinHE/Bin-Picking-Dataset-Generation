@@ -47,9 +47,10 @@ def setup_env(use_gui, use_real_time):
             cameraTargetPosition=[0.0, 0.0, -0.16],
         )
 
+
     p.setPhysicsEngineParameter(numSolverIterations=30)
-    # TIMESTEP_ is 1.0 / 240.0
-    p.setPhysicsEngineParameter(fixedTimeStep=1.0 / 240.0)
+    # Increase simulation substeps for better stability (prevents tunneling)
+    p.setPhysicsEngineParameter(fixedTimeStep=1.0 / 240.0, numSubSteps=20)
 
     new_position = [5.5, 5.5, 0.0]
     scale_factor = 0.5
@@ -58,6 +59,9 @@ def setup_env(use_gui, use_real_time):
         "plane.urdf",
         basePosition=new_position,
         globalScaling=scale_factor)
+    print(f"Plane loaded at {new_position} with scale {scale_factor}. ID: {planeId}")
+    if planeId < 0:
+        raise RuntimeError("Failed to load plane.urdf!")
     textureId = p.loadTexture("assets/optical-table-texture.png")
     p.changeVisualShape(
         objectUniqueId=planeId,
@@ -239,6 +243,8 @@ def process_cycle(cycle_idx, json_setting, args):
                 ])
 
                 new_id = p.loadURDF(urdf_path, pos, orn)
+                # Enable Continuous Collision Detection (CCD)
+                p.changeDynamics(new_id, -1, ccdSweptSphereRadius=0.005)
                 obj_id.append(new_id)
                 obj_id_to_class[new_id] = class_name
 
@@ -272,6 +278,8 @@ def process_cycle(cycle_idx, json_setting, args):
                     ])
 
                     temp_id = p.loadURDF(urdf_path, pos, orn)
+                    # Enable Continuous Collision Detection (CCD)
+                    p.changeDynamics(temp_id, -1, ccdSweptSphereRadius=0.005)
                     p.performCollisionDetection()
                     contact_points = p.getContactPoints(temp_id)
 
@@ -366,6 +374,11 @@ def process_cycle(cycle_idx, json_setting, args):
 
         for idx in obj_id:
             boxPos, boxQuat = p.getBasePositionAndOrientation(idx)
+            z_val = boxPos[2]
+            print(f"Object {idx} ({obj_id_to_class[idx]}) World Z: {z_val:.4f}m")
+            if z_val < 0.0:
+                 print(f"⚠️ WARNING: Object {idx} is below table! Z={z_val:.4f}")
+
             world_matrix = np.eye(4)
             world_matrix[:3, :3] = np.array(p.getMatrixFromQuaternion(boxQuat)).reshape((3, 3))
             world_matrix[:3, 3] = boxPos

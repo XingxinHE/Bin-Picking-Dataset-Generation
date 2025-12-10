@@ -245,6 +245,17 @@ def main():
                 print(f"Warning: No foreground points for {drop_name}")
                 continue
 
+            # Create lookup dict
+            pose_lookup = {p['obj_id']: p for p in poses}
+
+            # Filter points that are not in pose_lookup (e.g. ID 0 / background)
+            valid_mask = np.isin(point_ids, list(pose_lookup.keys()))
+            points = points[valid_mask]
+            point_ids = point_ids[valid_mask]
+
+            if len(points) == 0:
+                raise ValueError(f"No valid object points for {drop_name} after filtering.")
+
             # Sampling
             if len(points) >= TARGET_NUM_POINT:
                 choice = np.random.choice(len(points), TARGET_NUM_POINT, replace=False)
@@ -254,8 +265,6 @@ def main():
             points = points[choice]
             point_ids = point_ids[choice]
 
-            # Create lookup dict
-            pose_lookup = {p['obj_id']: p for p in poses}
 
             # ----- Recalculate Visibility from Point Counts -----
             # V_i = N_i / N_max (Paper formula)

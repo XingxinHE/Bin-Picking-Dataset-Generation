@@ -191,6 +191,10 @@ def main():
         pcl.set_enabled(False)  # Disable by default
 
     print("\n--- Launching Polyscope ---")
+
+    # add a plane at z=0.6
+    ps.register_surface_mesh("plane", np.array([[-1, 1, 0.6], [-1, -1, 0.6], [1, -1, 0.6], [1, 1, 0.6]]), np.array([[0, 1, 2, 3]]))
+
     ps.show()
 
 
