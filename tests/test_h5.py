@@ -394,3 +394,89 @@ def test_z_range_compliance(h5_files):
             f"GT Z below near limit in {h5_path}: min_gt_z={min_gt_z:.4f}m < {near_limit_m:.4f}m"
         assert max_gt_z <= far_limit_m, \
             f"GT Z above far limit in {h5_path}: max_gt_z={max_gt_z:.4f}m > {far_limit_m:.4f}m"
+
+
+def test_plane_distance(h5_files):
+    """
+    Verify that the objects are resting on the table at TARGET_DISTANCE.
+
+    Method:
+    1. Load the Ground Truth pose from the corresponding CSV.
+    2. Load the object mesh.
+    3. Apply the GT pose to the mesh.
+    4. Sample points from the transformed mesh.
+    5. Verify that the "bottom" of the object (highest Z values in camera frame)
+       corresponds to the table plane (TARGET_DISTANCE).
+    """
+    print(f"Checking mesh contact plane against TARGET_DISTANCE: {TARGET_DISTANCE:.4f}m")
+
+    # We need to find the CSV files corresponding to the H5 files
+    # H5 path: .../cycle_XXXX/001.h5
+    # CSV path: .../gt/cycle_XXXX/001.csv
+
+    for h5_path in h5_files:
+        cycle_dir = os.path.dirname(h5_path) # .../h5/cycle_XXXX
+        cycle_name = os.path.basename(cycle_dir)
+        drop_name = os.path.basename(h5_path).replace(".h5", "")
+
+        # Construct CSV path
+        # Assuming standard directory structure
+        data_root = os.path.dirname(os.path.dirname(cycle_dir)) # .../data/teris/training
+        csv_path = os.path.join(data_root, "gt", cycle_name, f"{drop_name}.csv")
+
+        if not os.path.exists(csv_path):
+            # Fallback for different structure or skip
+            print(f"Skipping {h5_path}: CSV not found at {csv_path}")
+            continue
+
+        # Load CSV Poses
+        objects = []
+        with open(csv_path, 'r') as f:
+            lines = f.readlines()
+            for line in lines[1:]:
+                line = line.strip()
+                if not line: continue
+                parts = line.split(',')
+                cls_name = parts[1]
+                trans = np.array([float(x) for x in parts[2:5]])
+                rot = np.array([float(x) for x in parts[5:14]]).reshape(3, 3)
+                objects.append({'class': cls_name, 'trans': trans, 'rot': rot})
+
+        for obj in objects:
+            # Load Mesh
+            obj_file = os.path.join(MODEL_DIR, f"{obj['class']}.obj")
+            if not os.path.exists(obj_file):
+                continue
+
+            mesh = trimesh.load(obj_file)
+
+            # Apply URDF Fix (180 deg rotation around X)
+            # The GT pose in CSV is for the *visual* mesh which has this offset in URDF.
+            # But the raw OBJ does not have it. We must apply it to match the simulation state.
+            urdf_fix = np.eye(4)
+            urdf_fix[:3, :3] = trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0])[:3, :3]
+            mesh.apply_transform(urdf_fix)
+
+            # Apply GT Pose
+            transform = np.eye(4)
+            transform[:3, :3] = obj['rot']
+            transform[:3, 3] = obj['trans']
+            mesh.apply_transform(transform)
+
+            # Sample points from the mesh surface
+            # 2000 points should be enough to capture the bottom face
+            samples, _ = trimesh.sample.sample_surface(mesh, 2000)
+
+            # Find the "bottom" points (highest Z in camera frame)
+            # Camera looks down +Z? No, OpenCV frame: Z is forward (depth).
+            # Table is at Z = TARGET_DISTANCE.
+            # Objects are ON the table. So their furthest points should be at TARGET_DISTANCE.
+            z_values = samples[:, 2]
+            z_max = np.percentile(z_values, 99.5) # Robust max
+
+            dist_diff = abs(z_max - TARGET_DISTANCE)
+
+            # Tolerance: 1cm (0.01m)
+            # This confirms the GT pose places the object exactly on the table.
+            assert dist_diff < 0.01, \
+                f"Mesh contact mismatch for {obj['class']} in {drop_name}: max_z={z_max:.4f}m, expected={TARGET_DISTANCE:.4f}m"

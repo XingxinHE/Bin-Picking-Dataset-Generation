@@ -38,6 +38,7 @@ dependencies = [
     { name = "pybullet" },
     { name = "python-fcl" },
     { name = "rtree" },
+    { name = "scikit-learn" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "trimesh" },
@@ -59,6 +60,7 @@ requires-dist = [
     { name = "pybullet" },
     { name = "python-fcl", specifier = ">=0.7.0.10" },
     { name = "rtree", specifier = ">=1.4.1" },
+    { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "trimesh", specifier = ">=4.10.0" },
 ]

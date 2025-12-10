@@ -537,8 +537,17 @@ for cycle_idx in range(START_CYCLE_, MAX_CYCLE_ + 1):
             world_matrix[:3, 3] = boxPos
 
             # Transform to Camera Frame
-            # T_cam = T_correction * T_view * T_world
-            cam_matrix = correction_matrix @ view_matrix @ world_matrix
+            # T_cam = T_correction * T_view * T_world * T_visual_offset
+            # We need to account for the URDF visual offset (RotX 180)
+            # Hack?
+            visual_correction_matrix = np.array([
+                [1, 0, 0, 0],
+                [0, -1, 0, 0],
+                [0, 0, -1, 0],
+                [0, 0, 0, 1]
+            ])
+
+            cam_matrix = correction_matrix @ view_matrix @ world_matrix @ visual_correction_matrix
 
             # Extract new pos and rot
             new_pos = cam_matrix[:3, 3]
