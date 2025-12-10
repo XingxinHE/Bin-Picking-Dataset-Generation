@@ -104,7 +104,8 @@ def main():
 
     # Initialize Polyscope
     ps.init()
-    ps.set_up_dir("z_up")
+    ps.set_up_dir("neg_y_up")
+    ps.set_front_dir("neg_z_front")
     add_coordinate_axes()
 
     # Create groups
