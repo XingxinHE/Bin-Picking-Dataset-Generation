@@ -29,6 +29,7 @@ uv run 1_pybullet_create_n_collect.py \
     --renderer tiny \
     --workers $CPUS \
     --dataset_name $DATASET_NAME \
+    --model_name teris \
     --dropping packing \
     --max_drop 80 \
     --object_types I O J L S Z T \

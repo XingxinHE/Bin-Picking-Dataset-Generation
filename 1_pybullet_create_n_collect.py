@@ -170,6 +170,11 @@ def process_cycle(cycle_idx, json_setting, args):
     DATASET_FOLDER_NAME_ = json_setting["folder_struct"]["dataset_folder_name"]
     ITEM_NAME_ = json_setting["folder_struct"]["item_name"]
     MODEL_FOLDER_NAME_ = json_setting["folder_struct"]["model_folder_name"]
+
+    # Use explicit model name if available, otherwise fallback to item_name (legacy behavior)
+    # But main() guarantees model_name is set now.
+    MODEL_NAME_ = json_setting["folder_struct"].get("model_name", "teris")
+
     TRAIN_TEST_FOLDER_NAME_ = json_setting["folder_struct"]["train_test_folder_name"]
     RGB_IMG_FOLDER_NAME_ = json_setting["folder_struct"]["rgb_img_folder_name"]
     DEPTH_IMG_FOLDER_NAME_ = json_setting["folder_struct"]["depth_img_folder_name"]
@@ -178,7 +183,7 @@ def process_cycle(cycle_idx, json_setting, args):
     GT_MATRIX_POSES_FOLDER_NAME_ = json_setting["folder_struct"]["gt_matrix_poses_folder_name"]
 
     ITEM_FOLDER_PATH_ = os.path.join(CURR_DIR_, DATASET_FOLDER_NAME_, ITEM_NAME_)
-    MODEL_FOLDER_PATH_ = os.path.join(CURR_DIR_, MODEL_FOLDER_NAME_, ITEM_NAME_)
+    MODEL_FOLDER_PATH_ = os.path.join(CURR_DIR_, MODEL_FOLDER_NAME_, MODEL_NAME_)
     TRAIN_TEST_FOLDER_PATH_ = os.path.join(CURR_DIR_, DATASET_FOLDER_NAME_, ITEM_FOLDER_PATH_, TRAIN_TEST_FOLDER_NAME_)
 
     RGB_IMG_FOLDER_PATH_ = os.path.join(TRAIN_TEST_FOLDER_PATH_, RGB_IMG_FOLDER_NAME_)
@@ -415,6 +420,7 @@ def main():
     # New arguments for decoupling
     parser.add_argument("--max_drop", type=int, default=None, help="Max items to drop")
     parser.add_argument("--dataset_name", type=str, default=None, help="Name of the dataset (folder name)")
+    parser.add_argument("--model_name", type=str, default="teris", help="Name of the model folder to use (default: teris)")
     parser.add_argument("--object_types", nargs='+', default=None, help="List of object types to drop")
     parser.add_argument("--dropping", type=str, default=None, choices=["falling", "packing"], help="Dropping style")
 
@@ -435,17 +441,29 @@ def main():
     if args.dataset_name is not None:
         json_setting["folder_struct"]["item_name"] = args.dataset_name
 
+    # Set model name (source of URDFs)
+    # If not in json, we use the default from CLI ("teris") or whatever is in json if exists
+    # But json usually assumes item_name == model_name. We splits it now.
+    json_setting["folder_struct"]["model_name"] = args.model_name
+
+    # Handle object types
     if args.object_types is not None:
         json_setting["model_param"]["types_active"] = args.object_types
     else:
-        dataset_name = json_setting["folder_struct"]["item_name"]
-        specific_key = f"types_{dataset_name}"
+        # Fallback logic
+        # We should use model_name to find types, not dataset_name
+        model_name = json_setting["folder_struct"]["model_name"]
+
+        # Try to find specific key
+        specific_key = f"types_{model_name}"
         if specific_key in json_setting["model_param"]:
              json_setting["model_param"]["types_active"] = json_setting["model_param"][specific_key]
         elif "types_teris" in json_setting["model_param"]:
+             # Default fallback if model-specific types not found
              json_setting["model_param"]["types_active"] = json_setting["model_param"]["types_teris"]
         else:
-            raise ValueError(f"No object types defined for {dataset_name}")
+             # Just use whatever is available if it matches?
+             raise ValueError(f"No object types defined for {model_name}")
 
     if args.dropping is not None:
         json_setting["dropping_option"] = args.dropping
