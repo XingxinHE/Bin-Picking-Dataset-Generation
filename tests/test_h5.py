@@ -18,25 +18,32 @@ from camera_config import TARGET_DISTANCE
 
 
 # --- Configuration ---
-DATA_DIR = "data/teris/training"
-CLASS_MAPPING_FILE = "model/teris/class.json"
-MODEL_DIR = "model/teris"
-GT_DIR = os.path.join(DATA_DIR, "gt")
-H5_DIR = os.path.join(DATA_DIR, "h5")
-
-
 # --- Fixtures ---
 @pytest.fixture(scope="module")
-def class_mapping():
+def paths(dataset_name):
+    """Resolve paths based on dataset name"""
+    data_dir = f"data/{dataset_name}/training"
+    return {
+        "data_dir": data_dir,
+        "class_mapping_file": f"model/{dataset_name}/class.json",
+        "model_dir": f"model/{dataset_name}",
+        "gt_dir": os.path.join(data_dir, "gt"),
+        "h5_dir": os.path.join(data_dir, "h5")
+    }
+
+@pytest.fixture(scope="module")
+def class_mapping(paths):
     """Load class mapping from class.json"""
-    with open(CLASS_MAPPING_FILE, 'r') as f:
+    if not os.path.exists(paths["class_mapping_file"]):
+        pytest.skip(f"Class mapping file not found: {paths['class_mapping_file']}")
+    with open(paths["class_mapping_file"], 'r') as f:
         return json.load(f)
 
 
 @pytest.fixture(scope="module")
-def h5_files():
+def h5_files(paths):
     """Get all H5 files in the dataset"""
-    files = glob.glob(os.path.join(H5_DIR, "**/*.h5"), recursive=True)
+    files = glob.glob(os.path.join(paths["h5_dir"], "**/*.h5"), recursive=True)
     if not files:
         pytest.skip("No H5 files found. Run data generation first.")
     return files
@@ -108,7 +115,7 @@ def test_label_consistency_per_obj_id(sample_h5_file):
 
 
 # --- Test 4: CSV-H5 Value Match ---
-def test_csv_h5_value_match(sample_h5_file):
+def test_csv_h5_value_match(sample_h5_file, paths):
     """
     For each object in H5, find its corresponding row in CSV and verify values match.
     """
@@ -116,7 +123,7 @@ def test_csv_h5_value_match(sample_h5_file):
     # e.g., h5/cycle_0001/005.h5 -> gt/cycle_0001/005.csv
     h5_basename = os.path.basename(sample_h5_file).replace(".h5", ".csv")
     cycle_name = os.path.basename(os.path.dirname(sample_h5_file))
-    csv_path = os.path.join(GT_DIR, cycle_name, h5_basename)
+    csv_path = os.path.join(paths["gt_dir"], cycle_name, h5_basename)
 
     if not os.path.exists(csv_path):
         pytest.skip(f"CSV file not found: {csv_path}")
@@ -165,14 +172,14 @@ def test_csv_h5_value_match(sample_h5_file):
 
 
 # --- Test 5: Collision Check with Trimesh ---
-def test_no_collisions_with_trimesh(sample_h5_file, class_mapping):
+def test_no_collisions_with_trimesh(sample_h5_file, paths):
     """
     Load the mesh, transform each object using its pose, and check for collisions.
     """
     # Derive CSV path
     h5_basename = os.path.basename(sample_h5_file).replace(".h5", ".csv")
     cycle_name = os.path.basename(os.path.dirname(sample_h5_file))
-    csv_path = os.path.join(GT_DIR, cycle_name, h5_basename)
+    csv_path = os.path.join(paths["gt_dir"], cycle_name, h5_basename)
 
     if not os.path.exists(csv_path):
         pytest.skip(f"CSV file not found: {csv_path}")
@@ -199,7 +206,7 @@ def test_no_collisions_with_trimesh(sample_h5_file, class_mapping):
     meshes = []
     for obj in objects:
         # Assume .obj file exists with class name
-        obj_file = os.path.join(MODEL_DIR, f"{obj['class']}.obj")
+        obj_file = os.path.join(paths["model_dir"], f"{obj['class']}.obj")
         if not os.path.exists(obj_file):
             pytest.skip(f"Mesh file not found: {obj_file}")
 
@@ -397,7 +404,7 @@ def test_z_range_compliance(h5_files):
             f"GT Z above far limit in {h5_path}: max_gt_z={max_gt_z:.4f}m > {far_limit_m:.4f}m"
 
 
-def test_plane_distance(h5_files):
+def test_plane_distance(h5_files, paths):
     """
     Verify that the objects are resting on the table at TARGET_DISTANCE.
 
@@ -422,8 +429,8 @@ def test_plane_distance(h5_files):
 
         # Construct CSV path
         # Assuming standard directory structure
-        data_root = os.path.dirname(os.path.dirname(cycle_dir)) # .../data/teris/training
-        csv_path = os.path.join(data_root, "gt", cycle_name, f"{drop_name}.csv")
+        # data_root = os.path.dirname(os.path.dirname(cycle_dir)) # .../data/teris/training
+        csv_path = os.path.join(paths["gt_dir"], cycle_name, f"{drop_name}.csv")
 
         if not os.path.exists(csv_path):
             # Fallback for different structure or skip
@@ -445,7 +452,7 @@ def test_plane_distance(h5_files):
 
         for obj in objects:
             # Load Mesh
-            obj_file = os.path.join(MODEL_DIR, f"{obj['class']}.obj")
+            obj_file = os.path.join(paths["model_dir"], f"{obj['class']}.obj")
             if not os.path.exists(obj_file):
                 continue
 

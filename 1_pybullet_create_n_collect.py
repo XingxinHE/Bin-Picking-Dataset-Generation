@@ -200,7 +200,7 @@ def process_cycle(cycle_idx, json_setting, args):
 
     # Parameters
     MAX_DROP_ = json_setting["data_generation"]["max_drop"]
-    TYPES_TERIS_ = json_setting["model_param"]["types_teris"]
+    TYPES_TERIS_ = json_setting["model_param"]["types_active"]
     DROP_X_MIN_ = -0.25
     DROP_X_MAX_ = 0.25
     DROP_Y_MIN_ = -0.2
@@ -411,23 +411,54 @@ def main():
     parser.add_argument("--mode", type=str, default="direct", choices=["gui", "direct"], help="Simulation mode")
     parser.add_argument("--renderer", type=str, default="tiny", choices=["tiny", "egl"], help="Renderer type")
     parser.add_argument("--workers", type=int, default=1, help="Number of parallel workers")
+
+    # New arguments for decoupling
+    parser.add_argument("--max_drop", type=int, default=None, help="Max items to drop")
+    parser.add_argument("--dataset_name", type=str, default=None, help="Name of the dataset (folder name)")
+    parser.add_argument("--object_types", nargs='+', default=None, help="List of object types to drop")
+    parser.add_argument("--dropping", type=str, default=None, choices=["falling", "packing"], help="Dropping style")
+
     args = parser.parse_args()
 
     # Load settings
     with open("data_generation_setting.json") as f:
         json_setting = json.load(f)
 
-    start_cycle = args.start_cycle if args.start_cycle is not None else json_setting["data_generation"]["start_cycle"]
-    end_cycle = args.end_cycle if args.end_cycle is not None else json_setting["data_generation"]["end_cycle"]
+    # CLI Overrides
+    if args.start_cycle is not None:
+        json_setting["data_generation"]["start_cycle"] = args.start_cycle
+    if args.end_cycle is not None:
+        json_setting["data_generation"]["end_cycle"] = args.end_cycle
+    if args.max_drop is not None:
+        json_setting["data_generation"]["max_drop"] = args.max_drop
+
+    if args.dataset_name is not None:
+        json_setting["folder_struct"]["item_name"] = args.dataset_name
+
+    if args.object_types is not None:
+        json_setting["model_param"]["types_active"] = args.object_types
+    else:
+        dataset_name = json_setting["folder_struct"]["item_name"]
+        specific_key = f"types_{dataset_name}"
+        if specific_key in json_setting["model_param"]:
+             json_setting["model_param"]["types_active"] = json_setting["model_param"][specific_key]
+        elif "types_teris" in json_setting["model_param"]:
+             json_setting["model_param"]["types_active"] = json_setting["model_param"]["types_teris"]
+        else:
+            raise ValueError(f"No object types defined for {dataset_name}")
+
+    if args.dropping is not None:
+        json_setting["dropping_option"] = args.dropping
+
+    start_cycle = json_setting["data_generation"]["start_cycle"]
+    end_cycle = json_setting["data_generation"]["end_cycle"]
 
     print_camera_config()
     print(f"Generating cycles {start_cycle} to {end_cycle}")
+    print(f"Dataset: {json_setting['folder_struct']['item_name']}")
     print(f"Mode: {args.mode}, Renderer: {args.renderer}, Workers: {args.workers}")
-
-    # Create directories if they don't exist (parent folders)
-    # The worker creates cycle folders, but we should ensure parents exist
-    # ... (Already handled in global scope in original script, but better to do here if needed)
-    # For now, relying on worker to create subfolders.
+    print(f"Dropping: {json_setting['dropping_option']}, Max Drop: {json_setting['data_generation']['max_drop']}")
+    print(f"Object Types: {json_setting['model_param']['types_active']}")
 
     cycles = list(range(start_cycle, end_cycle + 1))
 

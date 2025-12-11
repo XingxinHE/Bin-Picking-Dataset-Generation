@@ -2,7 +2,7 @@
     "data_generation": {
         "start_cycle": 1,
         "end_cycle": 1,
-        "max_drop": 10
+        "max_drop": 80
     },
     "folder_struct": {
         "dataset_folder_name": "data",
@@ -20,11 +20,7 @@
     },
     "model_param": {
         "types_teris": [
-            "I",
-            "J",
-            "O",
-            "S",
-            "T"
+            "S"
         ]
     },
     "dropping_option": "packing"
