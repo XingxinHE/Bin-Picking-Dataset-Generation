@@ -12,21 +12,20 @@ import sys
 import glob
 import trimesh
 
-# Add parent directory to path for camera_config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Standard import - run with 'uv run python -m pytest' to ensure root is in path
 from camera_config import TARGET_DISTANCE
 
 
 # --- Configuration ---
 # --- Fixtures ---
 @pytest.fixture(scope="module")
-def paths(dataset_name):
-    """Resolve paths based on dataset name"""
+def paths(dataset_name, model_name):
+    """Resolve paths based on dataset name and model name"""
     data_dir = f"data/{dataset_name}/training"
     return {
         "data_dir": data_dir,
-        "class_mapping_file": f"model/{dataset_name}/class.json",
-        "model_dir": f"model/{dataset_name}",
+        "class_mapping_file": f"model/{model_name}/class.json",
+        "model_dir": f"model/{model_name}",
         "gt_dir": os.path.join(data_dir, "gt"),
         "h5_dir": os.path.join(data_dir, "h5")
     }
