@@ -54,7 +54,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Running Unit Tests..."
-uv run pytest tests/test_h5.py -v --dataset_name $DATASET_NAME > test_report.log 2>&1
+uv run python -m pytest -n auto tests/test_h5.py -v --dataset_name $DATASET_NAME > test_report.log 2>&1
 
 if [ $? -ne 0 ]; then
     echo "Tests failed! Check test_report.log"
