@@ -114,7 +114,7 @@ def test_label_consistency_per_obj_id(sample_h5_file):
 
 
 # --- Test 4: CSV-H5 Value Match ---
-def test_csv_h5_value_match(sample_h5_file, paths):
+def test_csv_h5_value_match(sample_h5_file, paths, class_mapping):
     """
     For each object in H5, find its corresponding row in CSV and verify values match.
     """
@@ -137,10 +137,11 @@ def test_csv_h5_value_match(sample_h5_file, paths):
                 continue
             parts = line.split(',')
             obj_id = int(parts[0])
+            cls_name = parts[1]
             trans = np.array([float(x) for x in parts[2:5]])
             rot = np.array([float(x) for x in parts[5:14]])
             vis_p = float(parts[-1])
-            csv_poses[obj_id] = {'trans': trans, 'rot': rot, 'vis': vis_p}
+            csv_poses[obj_id] = {'trans': trans, 'rot': rot, 'vis': vis_p, 'cls_name': cls_name}
 
     # Load H5 and compare
     with h5py.File(sample_h5_file, 'r') as f:
@@ -163,6 +164,15 @@ def test_csv_h5_value_match(sample_h5_file, paths):
 
         csv_trans = csv_poses[obj_id]['trans']
         csv_rot = csv_poses[obj_id]['rot']
+        csv_cls_name = csv_poses[obj_id]['cls_name']
+
+        # Check Class ID
+        expected_cls_id = class_mapping.get(csv_cls_name)
+        h5_cls_id = h5_label[14]
+
+        assert expected_cls_id is not None, f"Class name {csv_cls_name} not found in mapping"
+        assert h5_cls_id == expected_cls_id, \
+             f"Class ID mismatch for obj_id {obj_id}. H5: {h5_cls_id}, Expected (from CSV '{csv_cls_name}'): {expected_cls_id}"
 
         assert np.allclose(h5_trans, csv_trans, atol=1e-4), \
             f"Translation mismatch for obj_id {obj_id}. H5: {h5_trans}, CSV: {csv_trans}"
