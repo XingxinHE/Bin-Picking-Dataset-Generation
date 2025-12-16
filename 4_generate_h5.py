@@ -5,6 +5,7 @@ import cv2
 import json
 import argparse
 import glob
+import fpsample
 
 # Import shared camera configuration
 from camera_config import (
@@ -144,13 +145,21 @@ def process_cycle(cycle_name, data_dir, h5_root, gt_root, target_num_point, clas
             continue
 
         # Sampling
-        if len(points) >= target_num_point:
-            choice = np.random.choice(len(points), target_num_point, replace=False)
+        num_pnt = points.shape[0]
+        if num_pnt <= target_num_point:
+            # Pad if fewer points
+            t = int(1.0 * target_num_point / num_pnt) + 1
+            points_tile = np.tile(points, [t, 1])
+            points = points_tile[:target_num_point]
+            
+            ids_tile = np.tile(point_ids, [t])
+            point_ids = ids_tile[:target_num_point]
         else:
-            choice = np.random.choice(len(points), target_num_point, replace=True)
-
-        points = points[choice]
-        point_ids = point_ids[choice]
+            # FPS if more points
+            # using fpsample which is faster CPU implementation
+            sampled_idx = fpsample.bucket_fps_kdtree_sampling(points, target_num_point).astype(np.int64)
+            points = points[sampled_idx]
+            point_ids = point_ids[sampled_idx]
 
         # ----- Recalculate Visibility from Point Counts -----
         # V_i = N_i / N_max (Paper formula)
