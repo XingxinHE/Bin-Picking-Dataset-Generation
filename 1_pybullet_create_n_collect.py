@@ -33,7 +33,7 @@ CAMERA_EYE_POSITION_ = CAMERA_EYE_POSITION
 CAMERA_TARGET_POSITION_ = CAMERA_TARGET_POSITION
 CAMERA_UP_VECTOR_ = CAMERA_UP_VECTOR
 
-def setup_env(use_gui, use_real_time):
+def setup_env(use_gui, use_real_time, dropping_option="packing"):
     p.resetSimulation()
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.setGravity(0, 0, -9.87)
@@ -73,9 +73,12 @@ def setup_env(use_gui, use_real_time):
     if use_real_time:
         p.setRealTimeSimulation(1)
 
-    create_virtual_frustum()
+    if dropping_option == "falling":
+        create_visible_bin()
+    else:
+        create_invisible_box()
 
-def create_virtual_frustum():
+def create_invisible_box():
     # Calculate FOV bounds at Z=0
     z_height = CAMERA_EYE_POSITION_[2]
     fov_rad = np.deg2rad(CAMERA_FOV_)
@@ -101,6 +104,37 @@ def create_virtual_frustum():
     p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_top_bottom, basePosition=pos_bottom)
     p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, basePosition=pos_right)
     p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, basePosition=pos_left)
+
+def create_visible_bin():
+    # Calculate FOV bounds at Z=0
+    z_height = CAMERA_EYE_POSITION_[2]
+    fov_rad = np.deg2rad(CAMERA_FOV_)
+    view_height = 2 * z_height * np.tan(fov_rad / 2)
+    view_width = view_height * CAMERA_ASPECT_
+
+    # Wall thickness
+    thickness = 0.02
+    height = 0.5 # Wall height
+
+    # Wall positions (centers)
+    pos_top = [0, view_height/2 + thickness/2, height/2]
+    pos_bottom = [0, -view_height/2 - thickness/2, height/2]
+    pos_right = [view_width/2 + thickness/2, 0, height/2]
+    pos_left = [-view_width/2 - thickness/2, 0, height/2]
+
+    # Collision shapes
+    col_top_bottom = p.createCollisionShape(p.GEOM_BOX, halfExtents=[view_width/2 + thickness, thickness/2, height/2])
+    col_left_right = p.createCollisionShape(p.GEOM_BOX, halfExtents=[thickness/2, view_height/2, height/2])
+
+    # Visual shapes (Gray color)
+    vis_top_bottom = p.createVisualShape(p.GEOM_BOX, halfExtents=[view_width/2 + thickness, thickness/2, height/2], rgbaColor=[0.5, 0.5, 0.5, 1])
+    vis_left_right = p.createVisualShape(p.GEOM_BOX, halfExtents=[thickness/2, view_height/2, height/2], rgbaColor=[0.5, 0.5, 0.5, 1])
+
+    # Create bodies (Visible)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_top_bottom, baseVisualShapeIndex=vis_top_bottom, basePosition=pos_top)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_top_bottom, baseVisualShapeIndex=vis_top_bottom, basePosition=pos_bottom)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, baseVisualShapeIndex=vis_left_right, basePosition=pos_right)
+    p.createMultiBody(baseMass=0, baseCollisionShapeIndex=col_left_right, baseVisualShapeIndex=vis_left_right, basePosition=pos_left)
 
 def get_camera_image(view_matrix, proj_matrix, renderer):
     return p.getCameraImage(
@@ -206,12 +240,12 @@ def process_cycle(cycle_idx, json_setting, args):
     # Parameters
     MAX_DROP_ = json_setting["data_generation"]["max_drop"]
     TYPES_TERIS_ = json_setting["model_param"]["types_active"]
-    DROP_X_MIN_ = -0.25
-    DROP_X_MAX_ = 0.25
-    DROP_Y_MIN_ = -0.2
-    DROP_Y_MAX_ = 0.2
-    DROP_Z_MIN_ = 0.05
-    DROP_Z_MAX_ = 0.05
+    DROP_X_MIN_ = -0.15
+    DROP_X_MAX_ = 0.15
+    DROP_Y_MIN_ = -0.12
+    DROP_Y_MAX_ = 0.12
+    DROP_Z_MIN_ = 0.5
+    DROP_Z_MAX_ = 3
 
     heuristic_max_items = None
 
@@ -221,25 +255,34 @@ def process_cycle(cycle_idx, json_setting, args):
 
     use_real_time = (args.mode == 'gui')
 
+    dropping_option = json_setting.get("dropping_option", "falling")
+
     for item_count in range(1, MAX_DROP_ + 1):
-        setup_env(args.mode == 'gui', use_real_time)
+        setup_env(args.mode == 'gui', use_real_time, dropping_option)
         time.sleep(0.1)
 
-        dropping_option = json_setting.get("dropping_option", "falling")
         obj_id = []
         obj_id_to_class = {}
 
         if dropping_option == "falling":
-            for _ in range(item_count):
+            # Calculate Z step to distribute items linearly from Z_MIN to Z_MAX
+            z_step = 0
+            if item_count > 1:
+                z_step = (DROP_Z_MAX_ - DROP_Z_MIN_) / (item_count - 1)
+
+            for i in range(item_count):
                 class_name = random.choice(TYPES_TERIS_)
                 urdf_path = os.path.join(MODEL_FOLDER_PATH_, f"{class_name}.urdf")
                 if not os.path.exists(urdf_path):
                     continue
 
+                # Linear Z distribution
+                current_z = DROP_Z_MIN_ + i * z_step
+
                 pos = [
                     random.uniform(DROP_X_MIN_, DROP_X_MAX_),
                     random.uniform(DROP_Y_MIN_, DROP_Y_MAX_),
-                    random.uniform(DROP_Z_MIN_, DROP_Z_MAX_),
+                    current_z,
                 ]
                 orn = p.getQuaternionFromEuler([
                     random.uniform(0.01, 0.1),
@@ -252,6 +295,7 @@ def process_cycle(cycle_idx, json_setting, args):
                 p.changeDynamics(new_id, -1, ccdSweptSphereRadius=0.005)
                 obj_id.append(new_id)
                 obj_id_to_class[new_id] = class_name
+
 
                 for _ in range(10):
                     p.stepSimulation()

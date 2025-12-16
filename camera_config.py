@@ -79,7 +79,8 @@ def _interpolate_fov(specs: dict, target_mm: float) -> tuple:
 
 
 # Load FOV dimensions from JSON with interpolation support
-_ZIVID_SPEC_FILE = os.path.join(os.path.dirname(__file__), "zivid", "mr_460.json")
+# Use abspath to ensure it works regardless of CWD
+_ZIVID_SPEC_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zivid", "mr_460.json")
 if os.path.exists(_ZIVID_SPEC_FILE):
     with open(_ZIVID_SPEC_FILE, 'r') as f:
         _specs = json.load(f)
