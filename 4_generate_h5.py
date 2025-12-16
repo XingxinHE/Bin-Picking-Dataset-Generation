@@ -185,6 +185,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate H5 Dataset")
     parser.add_argument("--data_dir", type=str, default=None, help="Path to training directory (e.g. data/teris/training)")
     parser.add_argument("--dataset_name", type=str, default="teris", help="Dataset name if data_dir not provided")
+    parser.add_argument("--model_name", type=str, default="teris", help="Model name for class.json (default: teris)")
     parser.add_argument("--workers", type=int, default=1, help="Number of parallel workers")
     args = parser.parse_args()
 
@@ -201,20 +202,17 @@ def main():
     print(f"Processing data in: {data_dir}")
 
     # Load class mapping
-    # Assume model folder is at model/{dataset_name}/class.json
-    # Or try to find it relative to data_dir
-    # data_dir = .../data/teris/training
-    # model_dir = .../model/teris
+    # Determine path based on model_name
+    mapping_file = os.path.join("model", args.model_name, "class.json")
 
-    # Try generic path first
-    mapping_file = os.path.join("model", args.dataset_name, "class.json")
     if not os.path.exists(mapping_file):
-        print(f"Warning: Class mapping not found at {mapping_file}. Using default/empty.")
-        class_mapping = {}
-    else:
-        with open(mapping_file, 'r') as f:
-            class_mapping = json.load(f)
-        print(f"Loaded class mapping: {class_mapping}")
+        # Raising error as requested - no fallback
+        raise FileNotFoundError(f"Critical Error: Class mapping definition not found at {mapping_file}. "
+                                f"Please ensure model/{args.model_name}/class.json exists.")
+
+    with open(mapping_file, 'r') as f:
+        class_mapping = json.load(f)
+    print(f"Loaded class mapping for '{args.model_name}': {class_mapping}")
 
     gt_root = os.path.join(data_dir, "gt")
     h5_root = os.path.join(data_dir, "h5")
